@@ -1,66 +1,83 @@
 extern "C" {
-  #include <user_interface.h>
+#include <user_interface.h>
 }
+#include <ESP8266WiFi.h>
+#include <WiFiClient.h>
+ 
+
+#include <ESP8266WebServer.h>
+#include <ESP8266mDNS.h>
+
+#include <SPI.h>
+#include <SD.h>
+
+ 
+ESP8266WebServer server(80);
+
+File myFile;
+byte channel;
+boolean found;
+boolean serverMode;
 
 struct RxControl {
- signed rssi:8; // signal intensity of packet
- unsigned rate:4;
- unsigned is_group:1;
- unsigned:1;
- unsigned sig_mode:2; // 0:is 11n packet; 1:is not 11n packet;
- unsigned legacy_length:12; // if not 11n packet, shows length of packet.
- unsigned damatch0:1;
- unsigned damatch1:1;
- unsigned bssidmatch0:1;
- unsigned bssidmatch1:1;
- unsigned MCS:7; // if is 11n packet, shows the modulation
- // and code used (range from 0 to 76)
- unsigned CWB:1; // if is 11n packet, shows if is HT40 packet or not
- unsigned HT_length:16;// if is 11n packet, shows length of packet.
- unsigned Smoothing:1;
- unsigned Not_Sounding:1;
- unsigned:1;
- unsigned Aggregation:1;
- unsigned STBC:2;
- unsigned FEC_CODING:1; // if is 11n packet, shows if is LDPC packet or not.
- unsigned SGI:1;
- unsigned rxend_state:8;
- unsigned ampdu_cnt:8;
- unsigned channel:4; //which channel this packet in.
- unsigned:12;
+  signed rssi: 8; // signal intensity of packet
+  unsigned rate: 4;
+  unsigned is_group: 1;
+  unsigned: 1;
+  unsigned sig_mode: 2; // 0:is 11n packet; 1:is not 11n packet;
+  unsigned legacy_length: 12; // if not 11n packet, shows length of packet.
+  unsigned damatch0: 1;
+  unsigned damatch1: 1;
+  unsigned bssidmatch0: 1;
+  unsigned bssidmatch1: 1;
+  unsigned MCS: 7; // if is 11n packet, shows the modulation
+  // and code used (range from 0 to 76)
+  unsigned CWB: 1; // if is 11n packet, shows if is HT40 packet or not
+  unsigned HT_length: 16; // if is 11n packet, shows length of packet.
+  unsigned Smoothing: 1;
+  unsigned Not_Sounding: 1;
+  unsigned: 1;
+  unsigned Aggregation: 1;
+  unsigned STBC: 2;
+  unsigned FEC_CODING: 1; // if is 11n packet, shows if is LDPC packet or not.
+  unsigned SGI: 1;
+  unsigned rxend_state: 8;
+  unsigned ampdu_cnt: 8;
+  unsigned channel: 4; //which channel this packet in.
+  unsigned: 12;
 };
-struct LenSeq{
- u16 len; // length of packet
- u16 seq; // serial number of packet, the high 12bits are serial number,
- // low 14 bits are Fragment number (usually be 0)
- u8 addr3[6]; // the third address in packet
+struct LenSeq {
+  u16 len; // length of packet
+  u16 seq; // serial number of packet, the high 12bits are serial number,
+  // low 14 bits are Fragment number (usually be 0)
+  u8 addr3[6]; // the third address in packet
 };
-struct sniffer_buf{
- struct RxControl rx_ctrl;
- u8 buf[36 ]; // head of ieee80211 packet
- u16 cnt; // number count of packet
- struct LenSeq lenseq[1]; //length of packet
+struct sniffer_buf {
+  struct RxControl rx_ctrl;
+  u8 buf[36 ]; // head of ieee80211 packet
+  u16 cnt; // number count of packet
+  struct LenSeq lenseq[1]; //length of packet
 };
-struct sniffer_buf2{
- struct RxControl rx_ctrl;
- u8 buf[112];
- u16 cnt;
- u16 len; //length of packet
-}; 
+struct sniffer_buf2 {
+  struct RxControl rx_ctrl;
+  u8 buf[112];
+  u16 cnt;
+  u16 len; //length of packet
+};
 
 struct framectrl_80211
 {
-u8 Protocol:2;
-u8 Type:2;
-u8 Subtype:4;
-u8 ToDS:1;
-u8 FromDS:1;
-u8 MoreFlag:1;
-u8 Retry:1;
-u8 PwrMgmt:1;
-u8 MoreData:1;
-u8 Protectedframe:1;
-u8 Order:1;
+  u8 Protocol: 2;
+  u8 Type: 2;
+  u8 Subtype: 4;
+  u8 ToDS: 1;
+  u8 FromDS: 1;
+  u8 MoreFlag: 1;
+  u8 Retry: 1;
+  u8 PwrMgmt: 1;
+  u8 MoreData: 1;
+  u8 Protectedframe: 1;
+  u8 Order: 1;
 };
 
 struct probe_request_80211
@@ -76,61 +93,378 @@ struct probe_request_80211
   uint32 htctrl;
 };
 
+
+uint8 tst[6][6] ;
+uint8 bla[6];
+int i = 0;
+
+
+//EEPROM
+
+int address = 100;
+byte value;
+
 //802.11 Mac Header
-void sniffer_wifi_promiscuous_rx(uint8 * buf, short unsigned int len){
+void sniffer_wifi_promiscuous_rx(uint8 * buf, short unsigned int len) {
 
 
-   struct LenSeq * lenseq;
-    
-    if(len == 12){
-      
+  struct LenSeq * lenseq;
+
+  if (len == 12) {
+
+  }
+  if (len == 128) {
+
+  } else {
+    // Serial.println(len);
+    struct sniffer_buf *sniffer_data = (struct sniffer_buf*) buf;
+    struct probe_request_80211 *probe_request = (struct probe_request_80211*) sniffer_data->buf;
+    char str[190];
+    char fname[20];
+    //sprintf(str,"rdaddr: %02x:%02x:%02x:%02x:%02x:%02x tsaddr: %02x:%02x:%02x:%02x:%02x:%02x bssid: %02x:%02x:%02x:%02x:%02x:%02x addr4: %02x:%02x:%02x:%02x:%02x:%02x\n",
+    //    MAC2STR(probe_request->rdaddr), MAC2STR(probe_request->tsaddr), MAC2STR(probe_request->bssid), MAC2STR(probe_request->addr4));
+
+    // bla = probe_request->bssid;
+    tst[0][0] = probe_request->bssid[0];
+    tst[0][1] = probe_request->bssid[1];
+    tst[0][2] = probe_request->bssid[2];
+    tst[0][3] = probe_request->bssid[3];
+    tst[0][4] = probe_request->bssid[4];
+    tst[0][5] = probe_request->bssid[5];
+
+    sprintf(str, "%02x:%02x:%02x:%02x:%02x:%02x",
+            MAC2STR(tst[0]));
+    Serial.println(str);
+
+    sprintf(fname, "mac%d.txt", channel);
+    myFile = SD.open(fname, FILE_WRITE);
+    if (myFile) {
+      myFile.println(str);
+      // close the file:
+      myFile.close();
+
+    } else {
+      // if the file didn't open, print an error:
+      Serial.print("error opening ");
+      Serial.println(fname);
     }
-    if(len == 128){
-      
-    }else{
-     // Serial.println(len);
-      struct sniffer_buf *sniffer_data = (struct sniffer_buf*) buf;
-      struct probe_request_80211 *probe_request = (struct probe_request_80211*) sniffer_data->buf;
-       char str[190];
-      //sprintf(str,"rdaddr: %02x:%02x:%02x:%02x:%02x:%02x tsaddr: %02x:%02x:%02x:%02x:%02x:%02x bssid: %02x:%02x:%02x:%02x:%02x:%02x addr4: %02x:%02x:%02x:%02x:%02x:%02x\n", 
-      //    MAC2STR(probe_request->rdaddr), MAC2STR(probe_request->tsaddr), MAC2STR(probe_request->bssid), MAC2STR(probe_request->addr4));
-    
 
-       sprintf(str,"%02x:%02x:%02x:%02x:%02x:%02x", 
-           MAC2STR(probe_request->bssid));
-       Serial.println(str);
+    sprintf(str, "rdaddr: %02x:%02x:%02x:%02x:%02x:%02x tsaddr: %02x:%02x:%02x:%02x:%02x:%02x bssid: %02x:%02x:%02x:%02x:%02x:%02x addr4: %02x:%02x:%02x:%02x:%02x:%02x\n ",
+            MAC2STR(probe_request->rdaddr), MAC2STR(probe_request->tsaddr), MAC2STR(probe_request->bssid), MAC2STR(probe_request->addr4));
+
+    myFile = SD.open("full-mac.txt", FILE_WRITE);
+    if (myFile) {
+      myFile.println(str);
+      // close the file:
+      myFile.close();
+
     }
-    
-     
- 
+    // Serial.println(probe_request->bssid);
+  }
+
+
+
 }
+
 
 void setup() {
   //
-  Serial.begin(115200); 
+
+    
+  Serial.begin(115200);
   // put your setup code here, to run once:
   Serial.println("Serial ON");
-  delay(500);
-  wifi_set_opmode(STATION_MODE);
-  wifi_promiscuous_enable(1); 
-  Serial.println("Serial ON");
-  wifi_set_channel(6);
+
+   serverMode = false;
+
+   delay(500);
+   
+
+  //read boot count
  
-   wifi_set_promiscuous_rx_cb(sniffer_wifi_promiscuous_rx);
-   char ap_mac[6] = {0x16, 0x34, 0x56, 0x78, 0x90, 0xab};
-   Serial.println("set MAC");
-  Serial.println(ap_mac);
-   wifi_promiscuous_set_mac((const uint8_t*)ap_mac);
-   Serial.println("Setup DONE");
+ 
+
+ 
+  if (!SD.begin(4)) {
+    Serial.println("initialization failed!");
+  } else {
+    Serial.println("SD ON - will be logging to SD card");
+  }
+
+
+  delay(5000);
+  wifi_set_opmode(STATION_MODE);
+
+   
+
+
+
 }
-byte channel;
+
+void stopsniff() {
+  wifi_promiscuous_enable(0);
+}
+
+
+void scanNetwork() {
+  int n = WiFi.scanNetworks();
+  Serial.print("found networks ");
+  Serial.println (n);
+
+  
+  found = false;
+
+  for (uint8_t i = 0; i < n; ++i)         // Print SSID and RSSI for each network found
+  {
+    myFile = SD.open("networks.txt", FILE_WRITE);
+    if (myFile) {
+      myFile.print(i);
+
+      myFile.print(": ");
+      myFile.print(WiFi.SSID(i));
+     
+      myFile.print(" (");
+      myFile.print(WiFi.RSSI(i));
+      myFile.print(")");
+      myFile.println((WiFi.encryptionType(i) == ENC_TYPE_NONE) ? " " : "*");
+      // close the file:
+      myFile.close();
+
+    }
+
+    Serial.print(i);
+    Serial.print(": ");
+    Serial.print(WiFi.SSID(i));
+     if(WiFi.SSID(i) == "AI-THINKER_C07275"){
+        Serial.print("found");
+        found = true;
+       }
+      
+    Serial.print(" (");
+    Serial.print(WiFi.RSSI(i));
+    Serial.print(")");
+    Serial.println((WiFi.encryptionType(i) == ENC_TYPE_NONE) ? " " : "*");
+  }
+ }
+void connectToLoki(){
+  WiFi.begin("AI-THINKER_C07275");
+  int i = 0;
+  while (WiFi.status() != WL_CONNECTED) {
+    i++;
+    delay(500);
+    Serial.print(".");
+    if(i == 30)
+    {
+      Serial.println("connect failed");
+      return;
+    }
+  }
+
+   if(WiFi.status() == WL_CONNECTED){
+    serverMode = true;
+    Serial.println("IP address: ");
+    Serial.println(WiFi.localIP());
+   }else{
+    Serial.println("connect failed");
+    return;
+   }
+  
+  
+
+  server.on("/", handleRoot);
+
+  server.on("/inline", [](){
+    server.send(200, "text/plain", "this works as well");
+  });
+
+  server.on("/restart", HTTP_GET, [](){
+   // restart service.
+   found = false;
+   serverMode = false;
+  });
+
+   //list directory
+  server.on("/list", HTTP_GET,  [](){
+     String output = "<html><head><link href='/CSS/BMIN.CSS' rel='stylesheet'><link href='/CSS/COVER.CSS' rel='stylesheet'><body><div class='site-wrapper'><div class='site-wrapper-inner'><div class='cover-container'><div class='masthead clearfix'></div><div class='inner cover'>";
+     
+    String newsubdir = "";
+    File root = SD.open("/");
+    printDirectory(root,output,newsubdir);
+    root.close();
+    output +="</div></div></div></div><script src='/JS/JMIN.JS'></script>  <script src='/JS/MIN.JS'></script></body></html>";
+     server.send(200, "text/html", output);
+  });
+
+  server.on("/all", HTTP_GET, [](){
+    String json = "{";
+    json += "\"heap\":"+String(ESP.getFreeHeap());
+    json += ", \"analog\":"+String(analogRead(A0));
+    json += ", \"gpio\":"+String((uint32_t)(((GPI | GPO) & 0xFFFF) | ((GP16I & 0x01) << 16)));
+    json += "}";
+    server.send(200, "text/json", json);
+    json = String();
+  });
+
+  server.onNotFound(handleNotFound);
+
+  
+   server.begin();
+  Serial.print("Server is up");
+}
+
+ void handleNotFound(){
+     loadFromSdCard(server.uri());
+  
+   }
+ 
+void printDirectory(File dir, String &output, String &subdir) {
+   int numTabs = 0;
+   String dirname = dir.name();
+    if(dirname.startsWith("SPOTLI")){
+      return;
+    }
+     if(dirname.startsWith("TRASHE")){
+      return;
+    }
+
+   output +="<div class='panel panel-primary'>";
+   output +="<div class='panel-heading'> DIR ";
+   output += subdir;
+   output += "</div><ul class='list-group'>";
+   while(true) {
+     
+     File entry =  dir.openNextFile();
+     if (! entry) {
+       // no more files
+       break;
+     }
+     for (uint8_t i=0; i<numTabs; i++) {
+       Serial.print('\t');
+     }
+     Serial.print(entry.name());
+      
+     if (entry.isDirectory()) {
+     // output += "<li class='list-group-item'>";
+     // output += entry.name();
+     // output += "</li>";
+       Serial.println("/");
+       String newsubdir = "";
+       newsubdir += subdir;
+       newsubdir +="/";
+       newsubdir += entry.name();
+       printDirectory(entry,output,newsubdir);
+      
+     } else {
+        output += "<li class='list-group-item'><a href='";
+        output += subdir;
+        output += "/";
+        output += entry.name();
+        output += "'>";
+        output += entry.name();
+        output += "</a></li>";
+       // files have sizes, directories do not
+       Serial.print("\t\t");
+       Serial.println(entry.size(), DEC);
+     }
+     
+     entry.close();
+   }
+
+   output += "</ul></div>";
+
+   //server.send(200, "text/html", output);
+}
+
+
+bool loadFromSdCard(String path){
+  String dataType = "text/plain";
+  if(path.endsWith("/")) path += "index.htm";
+
+  if(path.endsWith(".src")) path = path.substring(0, path.lastIndexOf("."));
+  else if(path.endsWith(".htm")) dataType = "text/html";
+  else if(path.endsWith(".HTM")) dataType = "text/html";
+  else if(path.endsWith(".txt")) dataType = "text";
+  else if(path.endsWith(".css")) dataType = "text/css";
+  else if(path.endsWith(".CSS")) dataType = "text/css";
+  else if(path.endsWith(".js")) dataType = "application/javascript";
+  else if(path.endsWith(".JS")) dataType = "application/javascript";
+  else if(path.endsWith(".png")) dataType = "image/png";
+  else if(path.endsWith(".gif")) dataType = "image/gif";
+  else if(path.endsWith(".jpg")) dataType = "image/jpeg";
+  else if(path.endsWith(".ico")) dataType = "image/x-icon";
+  else if(path.endsWith(".xml")) dataType = "text/xml";
+  else if(path.endsWith(".pdf")) dataType = "application/pdf";
+  else if(path.endsWith(".zip")) dataType = "application/zip";
+
+  File dataFile = SD.open(path.c_str());
+  if(dataFile.isDirectory()){
+    path += "/index.htm";
+    dataType = "text/html";
+    dataFile = SD.open(path.c_str());
+  }
+
+  if (!dataFile)
+    return false;
+
+  if (server.hasArg("download")) dataType = "application/octet-stream";
+
+  if (server.streamFile(dataFile, dataType) != dataFile.size()) {
+    Serial.println("Sent less data than expected!");
+  }
+
+  dataFile.close();
+  return true;
+}
+
+
+void startsniff() {
+  wifi_promiscuous_enable(1);
+  Serial.println("Serial ON");
+  channel = random(1, 11);
+  wifi_set_channel(channel);
+
+  wifi_set_promiscuous_rx_cb(sniffer_wifi_promiscuous_rx);
+  char ap_mac[6] = {0x16, 0x34, 0x56, 0x78, 0x90, 0xab};
+  char str[40];
+  sprintf(str, "%02x:%02x:%02x:%02x:%02x:%02x",
+          MAC2STR(ap_mac));
+
+  Serial.print("set MAC: ");
+  Serial.println(str);
+  wifi_promiscuous_set_mac((const uint8_t*)ap_mac);
+  Serial.println("Setup DONE");
+
+}
+
+
+void handleRoot() {
+   
+  server.send(200, "text/plain", "hello from esp8266!");
+  
+}
+
+
 
 void loop() {
-  // put your main code here, to run repeatedly:
-     channel = random(1, 11); 
-    wifi_set_channel(channel);
-     Serial.print("channel ");
-     Serial.println(channel);
+
+  if(!serverMode){
+    Serial.println("scan mode");
+    stopsniff();
+    scanNetwork();
+    if(found){
+      Serial.print("Try to connect to Loki");
+      connectToLoki();
+    }else{
      
-    delay(5000);
+      startsniff();
+      wifi_set_channel(channel);
+      Serial.print("channel ");
+      Serial.println(channel);
+    }
+    delay(60000);
+  }else{
+    server.handleClient();
+  }
+  
+  //delay(50000);
 }
